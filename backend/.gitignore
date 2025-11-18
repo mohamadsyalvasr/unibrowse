@@ -1,3 +1,7 @@
 sync_browser.db
 sync_browser.db-shm
 sync_browser.db-wal
+auth_tokens.txt
+__pycache__/
+*.pyc
+.env

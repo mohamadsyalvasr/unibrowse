@@ -1,11 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends, Header, status
+from fastapi import FastAPI, HTTPException, Depends, Header, status, Body, Request # ADDED Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import sqlite3
 from datetime import datetime, timedelta
 import threading
@@ -120,22 +119,6 @@ def get_token_from_header(authorization: Optional[str] = Header(None)) -> str:
     
     return token
 
-class BookmarkIn(BaseModel):
-    title: Optional[str] = ""
-    url: str
-    folder_path: Optional[str] = ""
-    created_at: Optional[str] = None
-
-class SyncBookmarksPayload(BaseModel):
-    browser_name: str
-    device_name: str
-    profile_name: str
-    bookmarks: List[BookmarkIn]
-
-class TokenResponse(BaseModel):
-    token: str
-    expires_in: int = 86400  # 24 hours
-
 app = FastAPI(title="Local Browser Sync - Secure Edition")
 
 # ===== Security Middleware =====
@@ -195,25 +178,83 @@ def get_or_create_browser_id(name: str, device_name: str, profile_name: str) -> 
         conn.commit()
         return cur.lastrowid
 
-@app.post("/api/auth/token", response_model=TokenResponse)
-def create_token():
+@app.post("/api/auth/token")
+def create_token() -> Dict[str, Any]:
     """Generate a new authentication token"""
     token = generate_token()
     token_hash = hash_token(token)
     save_token(token_hash)
-    return TokenResponse(token=token, expires_in=86400)
+    return {"token": token, "expires_in": 86400}
+
+# Manual payload validation helper
+def validate_sync_payload(payload: Dict[str, Any]):
+    required_fields = ["browser_name", "device_name", "profile_name", "bookmarks"]
+    for field in required_fields:
+        if field not in payload or not isinstance(payload[field], (str, list)):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Missing or invalid field: {field}"
+            )
+
+    if not isinstance(payload["bookmarks"], list):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="'bookmarks' field must be a list"
+        )
+
+    for i, bookmark in enumerate(payload["bookmarks"]):
+        if not isinstance(bookmark, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Bookmark at index {i} must be an object"
+            )
+        # Check required field: url
+        if "url" not in bookmark or not bookmark["url"] or not isinstance(bookmark["url"], str):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Bookmark at index {i} is missing required 'url' field or it is invalid"
+            )
+        # Ensure optional fields are strings or null if present
+        for optional_field in ["title", "folder_path", "created_at"]:
+             if optional_field in bookmark and bookmark[optional_field] is not None and not isinstance(bookmark[optional_field], str):
+                 raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Bookmark at index {i} has invalid type for '{optional_field}' (must be string or null)"
+                 )
+
 
 @app.post("/api/sync/bookmarks")
 @limiter.limit("10/minute")
 def sync_bookmarks(
-    payload: SyncBookmarksPayload,
+    request: Request, # ADDED: Required for slowapi rate limiting
+    payload: Dict[str, Any] = Body(...),
     token: str = Depends(get_token_from_header),
 ):
     """Sync bookmarks from extension (requires valid token)"""
+    
+    # --- Manual Validation (replacing Pydantic) ---
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request body must be a JSON object"
+        )
+    
+    try:
+        validate_sync_payload(payload)
+    except HTTPException:
+        raise
+    except Exception:
+        # Catch unexpected errors during validation
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid request body format or structure"
+        )
+    # -----------------------------------------------
+
     browser_id = get_or_create_browser_id(
-        payload.browser_name,
-        payload.device_name,
-        payload.profile_name,
+        payload["browser_name"],
+        payload["device_name"],
+        payload["profile_name"],
     )
 
     now = datetime.utcnow().isoformat()
@@ -224,13 +265,19 @@ def sync_bookmarks(
         inserted = 0
         updated = 0
 
-        for b in payload.bookmarks:
+        for b in payload["bookmarks"]:
+            # Access fields from the dict, using .get() for optional fields
+            b_title = b.get("title", "")
+            b_url = b["url"]
+            b_folder_path = b.get("folder_path", "")
+            b_created_at = b.get("created_at")
+            
             cur.execute(
                 """
                 SELECT id FROM bookmarks
                 WHERE browser_id = ? AND url = ? AND IFNULL(folder_path, '') = ?
                 """,
-                (browser_id, b.url, b.folder_path or ""),
+                (browser_id, b_url, b_folder_path or ""),
             )
             row = cur.fetchone()
             if row:
@@ -240,7 +287,7 @@ def sync_bookmarks(
                     SET title = ?, created_at = COALESCE(?, created_at), updated_at = ?
                     WHERE id = ?
                     """,
-                    (b.title, b.created_at, now, row["id"]),
+                    (b_title, b_created_at, now, row["id"]),
                 )
                 updated += 1
             else:
@@ -251,10 +298,10 @@ def sync_bookmarks(
                     """,
                     (
                         browser_id,
-                        b.title,
-                        b.url,
-                        b.folder_path or "",
-                        b.created_at,
+                        b.get("title", ""),
+                        b["url"],
+                        b.get("folder_path", "") or "",
+                        b.get("created_at"),
                         now,
                     ),
                 )
@@ -271,8 +318,11 @@ def sync_bookmarks(
 
 @app.get("/api/bookmarks")
 @limiter.limit("30/minute")
-def list_bookmarks(token: str = Depends(get_token_from_header)):
-    """List all bookmarks (requires valid token)"""
+def list_bookmarks(
+    request: Request, # ADDED: Required for slowapi rate limiting
+    token: str = Depends(get_token_from_header)
+) -> List[Dict[str, Any]]:
+    """List all synced bookmarks (requires valid token)"""
     with db_lock:
         conn = get_conn()
         cur = conn.cursor()
@@ -303,19 +353,19 @@ if __name__ == "__main__":
     ║    POST   /api/auth/token          - Generate auth token   ║
     ║    POST   /api/sync/bookmarks      - Sync bookmarks        ║
     ║    GET    /api/bookmarks           - List bookmarks        ║
-    ║                                                             ║
-    ║  Security Features:                                        ║
+    ║                                                            ║
+    ║  Security Features:                                         ║
     ║    ✓ Token-based authentication                            ║
-    ║    ✓ Rate limiting (10 sync/min, 30 list/min)             ║
+    ║    ✓ Rate limiting (10 sync/min, 30 list/min)              ║
     ║    ✓ Trusted host verification                             ║
     ║    ✓ CORS restricted to localhost                          ║
     ║    ✓ Secure headers                                        ║
     ║                                                             ║
-    ║  Setup Instructions:                                       ║
-    ║    1. Get token: curl http://127.0.0.1:8000/api/auth/token║
-    ║    2. Store token in extension storage                     ║
-    ║    3. Include in requests: Authorization: Bearer <token>   ║
-    ╚════════════════════════════════════════════════════════════╝
+    ║  Setup Instructions:                                        ║
+    ║    1. Run curl -X POST http://127.0.0.1:8000/api/auth/token ║
+    ║    2. Store token in extension storage                      ║
+    ║    3. Include in requests: Authorization: Bearer <token>    ║
+    ╚═════════════════════════════════════════════════════════════╝
     """)
     
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
