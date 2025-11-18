@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Local Browser Sync Client",
-  "version": "0.1",
+  "version": "0.2",
   "description": "Sync bookmarks ke server lokal FastAPI.",
   "permissions": [
     "bookmarks",
-    "storage"
+    "storage",
+    "alarms"
   ],
   "host_permissions": [
     "http://127.0.0.1:8000/*"

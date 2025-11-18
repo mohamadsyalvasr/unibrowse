@@ -14,12 +14,26 @@
         font-size: 12px;
         margin-top: 6px;
       }
-      input {
+      input[type="text"],
+      input[type="number"] {
         width: 100%;
         box-sizing: border-box;
         padding: 4px 6px;
         margin-top: 2px;
         font-size: 13px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        margin-top: 6px;
+        font-size: 12px;
+      }
+      .row input[type="checkbox"] {
+        margin-right: 6px;
+      }
+      .row input[type="number"] {
+        width: 60px;
+        margin-left: 4px;
       }
       button {
         width: 100%;
@@ -37,20 +51,27 @@
   <body>
     <label>
       Browser name
-      <input id="browserName" placeholder="misal: Chrome, Edge, Brave" />
+      <input id="browserName" type="text" placeholder="misal: Chrome, Edge, Brave" />
     </label>
 
     <label>
       Device name
-      <input id="deviceName" placeholder="misal: Laptop Rumah, PC Kantor" />
+      <input id="deviceName" type="text" placeholder="misal: Laptop Rumah, PC Kantor" />
     </label>
 
     <label>
       Profile name
-      <input id="profileName" placeholder="misal: Default, Profile 1" />
+      <input id="profileName" type="text" placeholder="misal: Default, Profile 1" />
     </label>
 
-    <button id="saveBtn">Simpan & Sync bookmarks ke lokal</button>
+    <div class="row">
+      <input id="autoSyncEnabled" type="checkbox" />
+      <span>Auto sync tiap</span>
+      <input id="autoSyncInterval" type="number" min="1" />
+      <span>menit</span>
+    </div>
+
+    <button id="saveBtn">Simpan & Sync sekarang</button>
     <div id="status"></div>
 
     <script src="popup.js"></script>
