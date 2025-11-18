@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Browser Sync</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        min-width: 260px;
+        padding: 10px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 4px 6px;
+        margin-top: 2px;
+        font-size: 13px;
+      }
+      button {
+        width: 100%;
+        padding: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        margin-top: 10px;
+      }
+      #status {
+        margin-top: 8px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <label>
+      Browser name
+      <input id="browserName" placeholder="misal: Chrome, Edge, Brave" />
+    </label>
+
+    <label>
+      Device name
+      <input id="deviceName" placeholder="misal: Laptop Rumah, PC Kantor" />
+    </label>
+
+    <label>
+      Profile name
+      <input id="profileName" placeholder="misal: Default, Profile 1" />
+    </label>
+
+    <button id="saveBtn">Simpan & Sync bookmarks ke lokal</button>
+    <div id="status"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
