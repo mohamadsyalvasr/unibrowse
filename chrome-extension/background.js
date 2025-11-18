@@ -1,6 +1,63 @@
-const API_URL = "http://127.0.0.1:8000/api/sync/bookmarks";
+const API_URL = "http://127.0.0.1:8000";
 const AUTO_SYNC_ALARM_NAME = "autoSyncBookmarks";
 const DEFAULT_INTERVAL_MIN = 15;
+const TOKEN_STORAGE_KEY = "auth_token";
+const TOKEN_TIMESTAMP_KEY = "auth_token_timestamp";
+const TOKEN_EXPIRY_DAYS = 7; // Refresh token weekly
+
+// ===== Token Management =====
+
+async function getStoredToken() {
+  const data = await chrome.storage.sync.get([TOKEN_STORAGE_KEY]);
+  return data[TOKEN_STORAGE_KEY] || null;
+}
+
+async function saveToken(token) {
+  await chrome.storage.sync.set({
+    [TOKEN_STORAGE_KEY]: token,
+    [TOKEN_TIMESTAMP_KEY]: Date.now()
+  });
+  console.log("✓ Token saved securely");
+}
+
+async function isTokenExpired() {
+  const data = await chrome.storage.sync.get([TOKEN_TIMESTAMP_KEY]);
+  if (!data[TOKEN_TIMESTAMP_KEY]) return true;
+  
+  const tokenAge = Date.now() - data[TOKEN_TIMESTAMP_KEY];
+  const expiryMs = TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+  return tokenAge > expiryMs;
+}
+
+async function ensureValidToken() {
+  let token = await getStoredToken();
+  
+  // Check if token exists and is not expired
+  if (token && !(await isTokenExpired())) {
+    return token;
+  }
+  
+  // Request new token from backend
+  try {
+    console.log("Requesting new authentication token...");
+    const resp = await fetch(`${API_URL}/api/auth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    
+    if (!resp.ok) {
+      throw new Error(`Failed to get token: HTTP ${resp.status}`);
+    }
+    
+    const data = await resp.json();
+    await saveToken(data.token);
+    console.log("✓ New token obtained");
+    return data.token;
+  } catch (err) {
+    console.error("Token request failed:", err);
+    throw new Error("Unable to obtain authentication token");
+  }
+}
 
 async function collectBookmarks() {
   const tree = await chrome.bookmarks.getTree();
@@ -41,22 +98,36 @@ async function syncBookmarks(meta) {
     bookmarks
   };
 
-  const resp = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
+  try {
+    // Ensure we have a valid token
+    const token = await ensureValidToken();
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`HTTP ${resp.status}: ${text}`);
+    const resp = await fetch(`${API_URL}/api/sync/bookmarks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      if (resp.status === 401) {
+        // Token invalid, clear it and try again
+        await chrome.storage.sync.remove([TOKEN_STORAGE_KEY]);
+        throw new Error("Token expired, please retry");
+      }
+      throw new Error(`HTTP ${resp.status}: ${text}`);
+    }
+
+    const data = await resp.json();
+    console.log("✓ Sync successful:", data);
+    return data;
+  } catch (err) {
+    console.error("Sync failed:", err.message);
+    throw err;
   }
-
-  const data = await resp.json();
-  console.log("Sync result:", data);
-  return data;
 }
 
 // Atur alarm auto sync berdasarkan setting yang tersimpan

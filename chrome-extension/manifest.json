@@ -1,21 +1,25 @@
 {
   "manifest_version": 3,
   "name": "Local Browser Sync Client",
-  "version": "0.2",
-  "description": "Sync bookmarks ke server lokal FastAPI.",
+  "version": "1.0",
+  "description": "Secure sync of bookmarks to local FastAPI server.",
   "permissions": [
     "bookmarks",
     "storage",
     "alarms"
   ],
   "host_permissions": [
-    "http://127.0.0.1:8000/*"
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Sync Browser Data",
+    "default_title": "Secure Browser Sync",
     "default_popup": "popup.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
   }
 }
