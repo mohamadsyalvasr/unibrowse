@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Browser Sync (Firefox)</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        min-width: 260px;
+        padding: 10px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      input[type="text"],
+      input[type="number"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 4px 6px;
+        margin-top: 2px;
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        margin-top: 6px;
+        font-size: 12px;
+      }
+      .row input[type="checkbox"] {
+        margin-right: 6px;
+      }
+      .row input[type="number"] {
+        width: 60px;
+        margin-left: 4px;
+      }
+      button {
+        width: 100%;
+        padding: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        margin-top: 10px;
+      }
+      #status {
+        margin-top: 8px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <label>
+      Browser name
+      <input id="browserName" type="text" placeholder="misal: Firefox Rumah" />
+    </label>
+
+    <label>
+      Device name
+      <input id="deviceName" type="text" placeholder="misal: Laptop Rumah, PC Kantor" />
+    </label>
+
+    <label>
+      Profile name
+      <input id="profileName" type="text" placeholder="misal: Default, Work" />
+    </label>
+
+    <div class="row">
+      <input id="autoSyncEnabled" type="checkbox" />
+      <span>Auto sync tiap</span>
+      <input id="autoSyncInterval" type="number" min="1" />
+      <span>menit</span>
+    </div>
+
+    <button id="saveBtn">Simpan & Sync sekarang</button>
+    <div id="status"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

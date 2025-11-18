@@ -1,0 +1,19 @@
+{
+  "manifest_version": 2,
+  "name": "Local Browser Sync Client (Firefox)",
+  "version": "0.1",
+  "description": "Sync Firefox bookmarks ke server lokal FastAPI.",
+  "browser_action": {
+    "default_title": "Sync Browser Data",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "alarms",
+    "http://127.0.0.1:8000/*"
+  ]
+}
