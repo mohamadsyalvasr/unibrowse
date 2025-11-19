@@ -1,14 +1,39 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, Security
+from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import sqlite3
 from datetime import datetime
 import threading
+import os
 
 DB_PATH = "sync_browser.db"
+AUTH_TOKENS_FILE = "auth_tokens.txt"
+API_KEY_NAME = "X-Auth-Token"
 
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 db_lock = threading.Lock()
+
+valid_tokens = set()
+
+def load_tokens():
+    global valid_tokens
+    if os.path.exists(AUTH_TOKENS_FILE):
+        with open(AUTH_TOKENS_FILE, "r") as f:
+            tokens = [line.strip() for line in f if line.strip()]
+            valid_tokens = set(tokens)
+        print(f"Loaded {len(valid_tokens)} tokens.")
+    else:
+        print(f"Warning: {AUTH_TOKENS_FILE} not found. No tokens loaded.")
+
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    if api_key_header in valid_tokens:
+        return api_key_header
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid or missing Authentication Token"
+    )
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -72,6 +97,7 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     init_db()
+    load_tokens()
 
 def get_or_create_browser_id(name: str, device_name: str, profile_name: str) -> int:
     with db_lock:
@@ -98,7 +124,7 @@ def get_or_create_browser_id(name: str, device_name: str, profile_name: str) -> 
         return cur.lastrowid
 
 @app.post("/api/sync/bookmarks")
-def sync_bookmarks(payload: SyncBookmarksPayload):
+def sync_bookmarks(payload: SyncBookmarksPayload, token: str = Depends(get_api_key)):
     browser_id = get_or_create_browser_id(
         payload.browser_name,
         payload.device_name,
@@ -159,7 +185,7 @@ def sync_bookmarks(payload: SyncBookmarksPayload):
     }
 
 @app.get("/api/bookmarks")
-def list_bookmarks():
+def list_bookmarks(token: str = Depends(get_api_key)):
     with db_lock:
         conn = get_conn()
         cur = conn.cursor()

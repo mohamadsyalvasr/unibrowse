@@ -41,11 +41,17 @@ async function syncBookmarks(meta) {
     bookmarks
   };
 
+  const headers = {
+    "Content-Type": "application/json"
+  };
+
+  if (meta.auth_token) {
+    headers["X-Auth-Token"] = meta.auth_token;
+  }
+
   const resp = await fetch(API_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: headers,
     body: JSON.stringify(payload)
   });
 
@@ -92,12 +98,13 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     console.log("Alarm auto sync fired, mulai sync...");
 
     chrome.storage.sync.get(
-      ["browser_name", "device_name", "profile_name"],
+      ["browser_name", "device_name", "profile_name", "auth_token"],
       (data) => {
         const meta = {
           browser_name: data.browser_name || "Chrome",
           device_name: data.device_name || "Laptop Lokal",
-          profile_name: data.profile_name || "Default"
+          profile_name: data.profile_name || "Default",
+          auth_token: data.auth_token || ""
         };
 
         syncBookmarks(meta)
